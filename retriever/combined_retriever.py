@@ -102,6 +102,7 @@ def combined_retrieve(
     keyword_results = keyword_retrieve_smart_fuzzy(query, top_k=top_k * 2)
     for item in keyword_results:
         item["_semantic_score"] = 0.0
+        item["_keyword_score"] = item.get("score", 0.0)
         item["_source"] = "keyword"
     
     # 合并（按 ID 去重 + 累加得分）
