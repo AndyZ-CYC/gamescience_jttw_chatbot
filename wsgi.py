@@ -31,17 +31,20 @@ try:
     
     # 导出应用对象供Gunicorn使用
     application = app
-except Exception as e:
-    logger.error(f"应用初始化失败: {str(e)}", exc_info=True)
+except Exception as error:
+    logger.error(f"应用初始化失败: {str(error)}", exc_info=True)
     # 创建一个最小的应用以显示错误信息
     from flask import Flask, jsonify
     fallback_app = Flask(__name__)
+    
+    # 保存错误信息，以便在路由函数中使用
+    error_message = str(error)
     
     @fallback_app.route('/')
     def error_page():
         return jsonify({
             "error": "应用初始化失败",
-            "message": str(e),
+            "message": error_message,
             "status": "请检查服务器日志获取更多信息"
         }), 500
     

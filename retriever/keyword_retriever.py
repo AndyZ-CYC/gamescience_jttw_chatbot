@@ -5,7 +5,7 @@ import logging
 import time
 from typing import List, Dict, Optional, Set, Tuple
 from openai import OpenAI
-from fuzzywuzzy import fuzz
+from rapidfuzz import fuzz
 import os
 
 # 配置日志
