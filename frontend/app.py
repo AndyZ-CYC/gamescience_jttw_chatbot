@@ -21,8 +21,8 @@ from generator import initialize, generate_answer, set_api_key
 
 # API密钥和配置
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', "")
-PINECONE_API_KEY = os.environ.get('PINECONE_API_KEY', "")
-DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', "")
+PINECONE_API_KEY = os.environ.get('PINECONE_API_KEY', "pcsk_5u46KS_Hx3E1L6rTJqeYJ7GmEmDEtpzT6juNNHBmVQTNEaoKr7uaH5tJHzjjdKcU3GaUZw")
+DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', "sk-e7852049ff9940a2b39113eeb97f1103")
 PINECONE_INDEX_NAME = os.environ.get('PINECONE_INDEX_NAME', "xiyouji-embedding")
 
 # 使用绝对路径定位JSON文件

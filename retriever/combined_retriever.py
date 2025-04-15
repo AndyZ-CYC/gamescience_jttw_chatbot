@@ -82,7 +82,7 @@ def combined_retrieve(
         
     # 动态确定top k
     def determine_top_k(query: str) -> int:
-        pattern_keywords = ["多少次", "几次", "列举", "所有", "哪些", "每一回", "全部", "列表", "列出", "清单", "一览", "一共", "其中"]
+        pattern_keywords = ["多少次", "几次", "列举", "所有", "哪些", "每一回", "全部", "列表", "列出", "清单", "一览", "一共", "其中", "八十一难"]
         for kw in pattern_keywords:
             if kw in query:
                 return top_k_high
