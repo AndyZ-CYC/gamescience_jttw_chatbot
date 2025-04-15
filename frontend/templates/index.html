@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>西游记知识库问答</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <!-- Markdown渲染库 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@5.2.0/github-markdown.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="text-center my-4">
+            <h1 class="title">西游记知识库问答</h1>
+            <p class="subtitle">基于原著文本的西游记问答系统</p>
+        </header>
+
+        <div class="chat-container">
+            <div class="model-selector mb-3">
+                <label for="model-select" class="form-label">选择模型:</label>
+                <select id="model-select" class="form-select">
+                    {% for model_id, model in models.items() %}
+                    <option value="{{ model_id }}">{{ model.display_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="chat-messages" id="chat-messages">
+                <div class="message system">
+                    <div class="message-content">
+                        <p>欢迎使用西游记问答系统！请输入您关于《西游记》的问题，我会尽力回答。</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-container">
+                <form id="chat-form" class="input-group">
+                    <input type="text" id="chat-input" class="form-control" placeholder="请输入问题..." autofocus>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-send"></i> 发送
+                    </button>
+                </form>
+                <div class="status-indicator" id="status-indicator"></div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="copyright-footer">
+        <div class="container">
+            <p class="text-muted text-end small">© 2025 张耀元 | 西游记问答系统</p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html> 
