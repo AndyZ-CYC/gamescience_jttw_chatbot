@@ -139,10 +139,7 @@
    ```
    pip install openai pinecone-client flask markdown python-dotenv
    ```
-3. 准备API密钥，默认API密钥如下：
-   - OpenAI: "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"
-   - Pinecone: "pcsk_5u46KS_Hx3E1L6rTJqeYJ7GmEmDEtpzT6juNNHBmVQTNEaoKr7uaH5tJHzjjdKcU3GaUZw"
-   - Deepseek: "sk-e7852049ff9940a2b39113eeb97f1103"
+3. 准备API密钥
 
 ### 启动系统
 
