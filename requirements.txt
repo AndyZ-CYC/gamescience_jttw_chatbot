@@ -1,5 +1,5 @@
 openai>=1.0.0
-pinecone-client>=2.2.0
+pinecone>=2.2.0
 flask>=2.0.0
 python-dotenv>=0.19.0
 thefuzz>=0.19.0
