@@ -11,8 +11,8 @@ from .keyword_retriever import (
     initialize as initialize_keyword,
     load_paragraphs,
     extract_keywords_gpt,
-    expand_keywords_gpt,
-    keyword_match_fuzzy,
+    expand_keywords_with_synonyms,
+    fuzzy_keyword_match,
     keyword_retrieve_smart_fuzzy
 )
 
@@ -63,8 +63,8 @@ __all__ = [
     # keyword retriever
     'load_paragraphs',
     'extract_keywords_gpt',
-    'expand_keywords_gpt',
-    'keyword_match_fuzzy',
+    'expand_keywords_with_synonyms',
+    'fuzzy_keyword_match',
     'keyword_retrieve_smart_fuzzy',
     
     # combined retriever
