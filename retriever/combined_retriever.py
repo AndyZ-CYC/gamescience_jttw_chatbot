@@ -1,7 +1,7 @@
 # retriever/combined_retriever.py
 from typing import List, Dict, Optional
 from .semantic_retriever import smart_semantic_retrieve as semantic_retrieve, initialize as semantic_initialize
-from .keyword_retriever import keyword_retrieve_smart_fuzzy, initialize as keyword_initialize
+from .keyword_retriever import keyword_retrieve_smart_fuzzy, initialize as keyword_initialize, load_paragraphs
 
 # 全局配置
 class Config:
@@ -48,11 +48,11 @@ def initialize(
         chat_model=chat_model
     )
     
-    # 初始化关键词检索器
+    # 初始化关键词检索器 - 正确传递参数
     keyword_initialize(
         openai_api_key=openai_api_key,
-        json_path=json_path,
-        chat_model=chat_model
+        chat_model=chat_model,
+        paragraphs_file=json_path  # 使用正确的参数名
     )
     
     _initialized = True
