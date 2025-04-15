@@ -20,9 +20,9 @@ if hasattr(sys.stdout, 'reconfigure') and sys.stdout.encoding != 'utf-8':
 from generator import initialize, generate_answer, set_api_key
 
 # API密钥和配置
-OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', "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")
-PINECONE_API_KEY = os.environ.get('PINECONE_API_KEY', "pcsk_5u46KS_Hx3E1L6rTJqeYJ7GmEmDEtpzT6juNNHBmVQTNEaoKr7uaH5tJHzjjdKcU3GaUZw")
-DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', "sk-e7852049ff9940a2b39113eeb97f1103")
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', "")
+PINECONE_API_KEY = os.environ.get('PINECONE_API_KEY', "")
+DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', "")
 PINECONE_INDEX_NAME = os.environ.get('PINECONE_INDEX_NAME', "xiyouji-embedding")
 
 # 使用绝对路径定位JSON文件
