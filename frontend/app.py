@@ -68,6 +68,9 @@ def index():
 
 @app.route('/api/query', methods=['POST'])
 def query():
+    import threading
+    from functools import partial
+    
     data = request.json
     query_text = data.get('query', '')
     model_id = data.get('model', 'gpt-4o')
@@ -80,46 +83,76 @@ def query():
     
     model_config = MODELS[model_id]
     
-    try:
-        # 设置合理的超时时间，避免请求被挂起太久
-        start_time = time.time()
-        
-        # 对于非GPT-4o模型添加提示
-        is_gpt4o = (model_config["provider"] == "openai" and model_config["name"] == "gpt-4o")
-        warning_msg = "" if is_gpt4o else "注意：对于复杂问题，处理可能需要较长时间。若遇到问题，可尝试简化您的问题或稍后重试。"
-        
-        # 避免在render.com上超时的措施
-        process_limit = 240  # 秒 - 增加时间限制
-        
-        answer = generate_answer(
-            query=query_text,
-            model_provider=model_config["provider"],
-            model_name=model_config["name"]
-        )
-        
-        processing_time = time.time() - start_time
-        print(f"查询处理完成，耗时: {processing_time:.2f}秒")
-        
-        if warning_msg and processing_time > 15:  # 如果处理时间较长，加入警告提示
-            answer = f"{warning_msg}\n\n{answer}"
+    # 对于非GPT-4o模型添加提示
+    is_gpt4o = (model_config["provider"] == "openai" and model_config["name"] == "gpt-4o")
+    warning_msg = "" if is_gpt4o else "注意：对于复杂问题，处理可能需要较长时间。若遇到问题，可尝试简化您的问题或稍后重试。"
+    
+    # 设置更宽松的处理时限
+    processing_limit = 500  # 秒
+    
+    # 创建一个存储结果和状态的容器
+    result = {
+        "answer": None,
+        "error": None,
+        "completed": False
+    }
+    
+    # 实际执行查询的函数
+    def execute_query():
+        try:
+            start_time = time.time()
             
-        return jsonify({"answer": answer})
-    except Exception as e:
-        error_msg = str(e)
-        print(f"生成回答时出错: {error_msg}")
-        
-        # 确保总是返回JSON响应，即使在错误情况下
+            # 执行生成答案的调用
+            answer = generate_answer(
+                query=query_text,
+                model_provider=model_config["provider"],
+                model_name=model_config["name"]
+            )
+            
+            processing_time = time.time() - start_time
+            print(f"查询处理完成，耗时: {processing_time:.2f}秒")
+            
+            if warning_msg and processing_time > 15:
+                answer = f"{warning_msg}\n\n{answer}"
+                
+            # 存储结果
+            result["answer"] = answer
+            result["completed"] = True
+            
+        except Exception as e:
+            result["error"] = str(e)
+            result["completed"] = True
+            print(f"生成回答时出错: {str(e)}")
+    
+    # 创建并启动线程
+    query_thread = threading.Thread(target=execute_query)
+    query_thread.daemon = True
+    query_thread.start()
+    
+    # 等待线程完成或超时
+    query_thread.join(timeout=processing_limit)
+    
+    # 检查处理状态并返回响应
+    if not result["completed"]:
+        print(f"查询处理超时 (>={processing_limit}秒)")
+        return jsonify({
+            "error": "处理请求超时",
+            "message": "您的查询处理时间过长，服务器响应超时。请尝试简化您的问题或稍后重试。"
+        }), 408
+    
+    if result["error"]:
+        error_msg = result["error"]
         try:
             # 检查是否包含超时错误的典型特征
             if "timeout" in error_msg.lower() or ("time" in error_msg.lower() and "out" in error_msg.lower()):
                 return jsonify({
                     "error": "处理请求超时",
-                    "message": "您的查询处理时间过长，服务器响应超时。请尝试简化您的问题或稍后再试。"
+                    "message": "您的查询处理时间过长，服务器响应超时。请尝试简化您的问题或稍后重试。"
                 }), 408  # 408 Request Timeout
             else:
                 return jsonify({
                     "error": "生成回答时出错", 
-                    "message": f"处理出错: {str(e)[:200]}"
+                    "message": f"处理出错: {error_msg[:200]}"
                 }), 500
         except Exception as json_error:
             # 如果连JSON化错误信息都失败，返回最简单的JSON
@@ -128,6 +161,9 @@ def query():
                 "error": "系统错误",
                 "message": "处理请求时发生严重错误，请尝试刷新页面或稍后重试"
             }), 500
+    
+    # 正常返回结果
+    return jsonify({"answer": result["answer"]})
 
 if __name__ == '__main__':
     # 在启动前初始化
