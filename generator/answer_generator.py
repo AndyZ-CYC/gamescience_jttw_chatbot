@@ -273,16 +273,15 @@ class AnswerGenerator:
         last_error = None
         start_total_time = time.time()  # 添加总时间跟踪
         
-        # 针对不同模型调整超时时间
-        timeout_seconds = 60  # 增加默认超时时间
-        
-        # 为特定模型配置更长的超时时间
-        if model_name in ["gpt-4.5-preview", "deepseek-reasoner"]:
-            logger.info(f"使用扩展超时时间(90秒)的模型: {model_name}")
-            timeout_seconds = 90
-        elif model_provider != "openai" or model_name != "gpt-4o":
-            logger.info(f"使用非GPT-4o模型，增加超时时间至75秒: {model_provider}/{model_name}")
-            timeout_seconds = 75
+        # 移除超时时间设置，依赖底层HTTP库的默认超时
+        # 不再需要这段代码
+        # timeout_seconds = 60  # 增加默认超时时间
+        # if model_name in ["gpt-4.5-preview", "deepseek-reasoner"]:
+        #     logger.info(f"使用扩展超时时间(90秒)的模型: {model_name}")
+        #     timeout_seconds = 90
+        # elif model_provider != "openai" or model_name != "gpt-4o":
+        #     logger.info(f"使用非GPT-4o模型，增加超时时间至75秒: {model_provider}/{model_name}")
+        #     timeout_seconds = 75
             
         while retries <= max_retries:
             try:
@@ -307,15 +306,15 @@ class AnswerGenerator:
                 
                 if model_provider == "openai":
                     try:
-                        # 使用超时参数
+                        # 移除超时参数
                         response = client.chat.completions.create(
                             model=model_name,
                             messages=[
                                 {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
                                 {"role": "user", "content": truncated_prompt}
                             ],
-                            temperature=0.3,
-                            # timeout=timeout_seconds  # 设置请求超时
+                            temperature=0.3
+                            # 移除timeout参数
                         )
                         answer = response.choices[0].message.content.strip()
                     except Exception as api_error:
@@ -332,8 +331,8 @@ class AnswerGenerator:
                                     {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
                                     {"role": "user", "content": truncated_prompt}
                                 ],
-                                temperature=0.3,
-                                timeout=45  # 增加备用模型超时时间
+                                temperature=0.3
+                                # 移除timeout参数
                             )
                             answer = backup_response.choices[0].message.content.strip()
                             answer = f"[注: 原选择的模型({model_name})响应超时，系统自动切换到GPT-4o模型]\n\n{answer}"
@@ -345,32 +344,25 @@ class AnswerGenerator:
                         model=model_name,
                         system="你是一个严谨的《西游记》分析助手",
                         messages=[{"role": "user", "content": truncated_prompt}],
-                        temperature=0.3,
-                        timeout=timeout_seconds
+                        temperature=0.3
+                        # 移除timeout参数
                     )
                     answer = response.content[0].text.strip()
                 
                 elif model_provider == "deepseek":
                     try:
-                        # DeepSeek API可能较慢，特别处理
+                        # DeepSeek API可能较慢
                         response = client.chat.completions.create(
                             model=model_name,
                             messages=[
                                 {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
                                 {"role": "user", "content": truncated_prompt}
-                            ],
-                            # timeout=timeout_seconds
+                            ]
+                            # 移除timeout参数
                         )
                         answer = response.choices[0].message.content.strip()
                     except Exception as api_error:
-                        # 记录详细错误信息
-                        error_str = str(api_error)
-                        logger.warning(f"DeepSeek API调用出错: {error_str}")
-                        logger.debug(f"完整错误信息: {traceback.format_exc()}")
-
-                        # 检查是否是超时相关错误
-                        if "timeout" in error_str.lower() or "timed out" in error_str.lower():
-                            logger.info("检测到超时错误，将在重试机制中处理")
+                        logger.warning(f"DeepSeek API调用出错: {str(api_error)}")
                         # 最后一次尝试，使用OpenAI GPT-4o作为后备
                         if retries >= max_retries - 1:
                             logger.warning(f"DeepSeek模型失败，切换到GPT-4o")
@@ -381,8 +373,8 @@ class AnswerGenerator:
                                     {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
                                     {"role": "user", "content": truncated_prompt}
                                 ],
-                                temperature=0.3,
-                                timeout=45  # 增加备用模型超时时间
+                                temperature=0.3
+                                # 移除timeout参数
                             )
                             answer = backup_response.choices[0].message.content.strip()
                             answer = f"[注: DeepSeek模型({model_name})响应超时，系统自动切换到GPT-4o模型]\n\n{answer}"

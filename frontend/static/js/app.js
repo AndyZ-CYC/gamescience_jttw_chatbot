@@ -64,9 +64,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // 更新状态指示器
-    function updateStatus(status) {
+    function updateStatus(status, time) {
         if (status === 'thinking') {
-            statusIndicator.innerHTML = '<i class="bi bi-hourglass-split"></i> 正在思考...';
+            let text = '<i class="bi bi-hourglass-split"></i> 正在思考...';
+            if (time) {
+                text = `<i class="bi bi-hourglass-split"></i> 正在思考... (${time}秒)`;
+            }
+            statusIndicator.innerHTML = text;
             statusIndicator.classList.add('thinking');
         } else if (status === 'error') {
             statusIndicator.innerHTML = '<i class="bi bi-exclamation-circle"></i> 出错了';
@@ -81,8 +85,30 @@ document.addEventListener('DOMContentLoaded', function() {
     async function sendMessage(message) {
         const model = modelSelect.value;
         
+        // 添加计时器变量
+        let processingTimer;
+        let processingTime = 0;
+        
         try {
             updateStatus('thinking');
+            
+            // 添加定时器，每5秒更新一次状态
+            processingTimer = setInterval(() => {
+                processingTime += 5;
+                updateStatus('thinking', processingTime);
+                
+                // 非GPT-4o模型时，处理时间超过60秒添加提示
+                if (processingTime >= 60 && model !== 'gpt-4o' && !document.getElementById('long-wait-notice')) {
+                    const noticeDiv = document.createElement('div');
+                    noticeDiv.id = 'long-wait-notice';
+                    noticeDiv.className = 'message system';
+                    noticeDiv.innerHTML = `<div class="message-content">
+                        <p>您选择的模型处理时间较长，请耐心等待。如果长时间无响应，可以尝试刷新页面并使用GPT-4o模型。</p>
+                    </div>`;
+                    chatMessages.appendChild(noticeDiv);
+                    scrollToBottom();
+                }
+            }, 5000);
             
             const response = await fetch('/api/query', {
                 method: 'POST',
@@ -94,6 +120,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     model: model
                 })
             });
+
+            // 请求完成后清除定时器
+            clearInterval(processingTimer);
 
             // 检查响应状态并先判断是否有错误
             if (!response.ok) {
@@ -123,6 +152,10 @@ document.addEventListener('DOMContentLoaded', function() {
             
         } catch (error) {
             console.error('请求出错:', error);
+            // 出错时也要清除定时器
+            if (processingTimer) {
+                clearInterval(processingTimer);
+            }
             updateStatus('error');
             
             // 处理不同类型的错误，提供友好的错误消息
