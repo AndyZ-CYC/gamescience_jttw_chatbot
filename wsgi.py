@@ -9,10 +9,12 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("xiyouji-app")
 
-# 设置Gunicorn配置 (通过环境变量，这些会被wsgi文件读取但不生效，需在命令行或配置文件中设置)
+# 设置Gunicorn配置 (通过环境变量)
 os.environ.setdefault('GUNICORN_TIMEOUT', '600')  # 设置工作进程超时为600秒
+os.environ.setdefault('GUNICORN_GRACEFUL_TIMEOUT', '600')  # 设置优雅关闭超时为600秒
+os.environ.setdefault('GUNICORN_WORKER_TIMEOUT', '600')  # 设置工作进程超时为600秒
 os.environ.setdefault('GUNICORN_WORKERS', '2')    # 设置工作进程数
-os.environ.setdefault('GUNICORN_WORKER_CLASS', 'gevent')  # 使用gevent异步工作模式
+os.environ.setdefault('GUNICORN_WORKER_CLASS', 'sync')  # 使用同步工作进程模式
 os.environ.setdefault('GUNICORN_WORKER_CONNECTIONS', '1000')  # 设置每个工作进程的最大连接数
 os.environ.setdefault('GUNICORN_KEEPALIVE', '5')  # 设置keepalive
 

@@ -1,1 +1,1 @@
-web: gunicorn wsgi:application --timeout 600 --workers 2 --worker-class sync --worker-connections 1000 --keep-alive 5
+web: gunicorn wsgi:application --timeout 600 --graceful-timeout 600 --worker-timeout 600 --workers 2 --worker-class sync --worker-connections 1000 --keep-alive 5

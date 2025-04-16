@@ -220,9 +220,29 @@ class AnswerGenerator:
         # 防止客户端复用导致的流读取问题，不再使用缓存机制
         # 每次请求都创建新客户端实例
         try:
+            import httpx
+            
+            # 创建自定义的httpx客户端，设置超时时间为10分钟
+            httpx_client = httpx.Client(
+                timeout=httpx.Timeout(
+                    connect=60.0,       # 连接超时
+                    read=600.0,         # 读取超时
+                    write=60.0,         # 写入超时
+                    pool=60.0           # 连接池超时
+                ),
+                limits=httpx.Limits(
+                    max_keepalive_connections=10,
+                    max_connections=50,
+                    keepalive_expiry=60.0
+                )
+            )
+            
             if model_provider == "openai":
                 from openai import OpenAI
-                client = OpenAI(api_key=api_key)
+                client = OpenAI(
+                    api_key=api_key,
+                    http_client=httpx_client
+                )
                 logger.debug("创建了新的OpenAI客户端")
                 return client
             elif model_provider == "anthropic":
@@ -232,7 +252,11 @@ class AnswerGenerator:
                 return client
             elif model_provider == "deepseek":
                 from openai import OpenAI
-                client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+                client = OpenAI(
+                    api_key=api_key, 
+                    base_url="https://api.deepseek.com",
+                    http_client=httpx_client
+                )
                 logger.debug("创建了新的DeepSeek客户端")
                 return client
             else:
