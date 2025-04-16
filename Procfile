@@ -1,1 +1,1 @@
-web: gunicorn wsgi:application --timeout 150 --workers 2 --keep-alive 5
+web: gunicorn wsgi:application --timeout 300 --workers 2 --keep-alive 5

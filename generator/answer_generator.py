@@ -252,8 +252,8 @@ class AnswerGenerator:
         model_provider: str, 
         model_name: str, 
         prompt: str,
-        max_retries: int = 3,
-        retry_delay: float = 2.0
+        max_retries: int = 2,  # 减少重试次数以避免长时间运行
+        retry_delay: float = 1.5  # 减少重试延迟
     ) -> str:
         """
         调用模型生成回答，带重试机制
@@ -271,17 +271,18 @@ class AnswerGenerator:
         """
         retries = 0
         last_error = None
+        start_total_time = time.time()  # 添加总时间跟踪
         
         # 针对不同模型调整超时时间
-        timeout_seconds = 30  # 默认超时时间
+        timeout_seconds = 60  # 增加默认超时时间
         
         # 为特定模型配置更长的超时时间
         if model_name in ["gpt-4.5-preview", "deepseek-reasoner"]:
-            logger.info(f"使用扩展超时时间(60秒)的模型: {model_name}")
-            timeout_seconds = 60
+            logger.info(f"使用扩展超时时间(90秒)的模型: {model_name}")
+            timeout_seconds = 90
         elif model_provider != "openai" or model_name != "gpt-4o":
-            logger.info(f"使用非GPT-4o模型，增加超时时间至45秒: {model_provider}/{model_name}")
-            timeout_seconds = 45
+            logger.info(f"使用非GPT-4o模型，增加超时时间至75秒: {model_provider}/{model_name}")
+            timeout_seconds = 75
             
         while retries <= max_retries:
             try:
@@ -297,7 +298,7 @@ class AnswerGenerator:
                         from openai import OpenAI
                         client = OpenAI(api_key=self.get_api_key("deepseek"), base_url="https://api.deepseek.com")
                 
-                start_time = time.time()
+                call_start_time = time.time()  # 修复变量名
                 
                 # 为长文本截断过长的prompt
                 truncated_prompt = self._truncate_prompt_if_needed(prompt, model_name)
@@ -332,7 +333,7 @@ class AnswerGenerator:
                                     {"role": "user", "content": truncated_prompt}
                                 ],
                                 temperature=0.3,
-                                timeout=30
+                                timeout=45  # 增加备用模型超时时间
                             )
                             answer = backup_response.choices[0].message.content.strip()
                             answer = f"[注: 原选择的模型({model_name})响应超时，系统自动切换到GPT-4o模型]\n\n{answer}"
@@ -374,7 +375,7 @@ class AnswerGenerator:
                                     {"role": "user", "content": truncated_prompt}
                                 ],
                                 temperature=0.3,
-                                timeout=30
+                                timeout=45  # 增加备用模型超时时间
                             )
                             answer = backup_response.choices[0].message.content.strip()
                             answer = f"[注: DeepSeek模型({model_name})响应超时，系统自动切换到GPT-4o模型]\n\n{answer}"
@@ -383,7 +384,14 @@ class AnswerGenerator:
                 else:
                     raise ValueError(f"不支持的模型提供方：{model_provider}")
                 
-                logger.info(f"模型响应生成完成，耗时 {time.time() - start_time:.2f}秒")
+                call_duration = time.time() - call_start_time
+                logger.info(f"模型响应生成完成，耗时 {call_duration:.2f}秒")
+                
+                # 检查总处理时间作为警告日志
+                total_time = time.time() - start_total_time
+                if total_time > 150:  # 2.5分钟以上记录警告
+                    logger.warning(f"处理时间较长，已用时 {total_time:.2f}秒")
+                
                 return answer
                 
             except Exception as e:
@@ -397,12 +405,14 @@ class AnswerGenerator:
                     self._clients = {}  # 清空客户端缓存
                     
                 logger.warning(f"调用{model_provider}模型失败 (尝试 {retries}/{max_retries}): {error_str}")
+                    
                 if retries > max_retries:
                     break
         
         logger.error(f"在 {max_retries} 次尝试后仍无法生成回答: {str(last_error)}")
+            
         # 生成简单的备用回答
-        return f"很抱歉，我暂时无法回答您的问题。系统遇到了技术问题：{str(last_error)[:100]}...\n\n建议尝试使用GPT-4o模型重新提问，或稍后再试。"
+        return f"很抱歉，我暂时无法回答您的问题。系统遇到了技术问题：{str(last_error)[:100]}...\n\n您可以尝试稍后再试或简化您的问题。"
         
     def _truncate_prompt_if_needed(self, prompt: str, model_name: str) -> str:
         """截断过长的prompt以避免超出模型最大上下文长度或超时"""

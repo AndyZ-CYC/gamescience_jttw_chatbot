@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("xiyouji-app")
 
 # 设置Gunicorn配置 (通过环境变量，这些会被wsgi文件读取但不生效，需在命令行或配置文件中设置)
-os.environ.setdefault('GUNICORN_TIMEOUT', '150')  # 设置工作进程超时为120秒
+os.environ.setdefault('GUNICORN_TIMEOUT', '300')  # 设置工作进程超时为300秒
 os.environ.setdefault('GUNICORN_WORKERS', '2')    # 设置工作进程数
 os.environ.setdefault('GUNICORN_KEEPALIVE', '5')  # 设置keepalive
 
