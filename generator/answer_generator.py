@@ -275,6 +275,17 @@ class AnswerGenerator:
         retries = 0
         last_error = None
         
+        # 针对不同模型调整超时时间
+        timeout_seconds = 30  # 默认超时时间
+        
+        # 为特定模型配置更长的超时时间
+        if model_name in ["gpt-4.5-preview", "deepseek-reasoner"]:
+            logger.info(f"使用扩展超时时间(60秒)的模型: {model_name}")
+            timeout_seconds = 60
+        elif model_provider != "openai" or model_name != "gpt-4o":
+            logger.info(f"使用非GPT-4o模型，增加超时时间至45秒: {model_provider}/{model_name}")
+            timeout_seconds = 45
+            
         while retries <= max_retries:
             try:
                 if retries > 0:
@@ -283,36 +294,85 @@ class AnswerGenerator:
                 
                 start_time = time.time()
                 
+                # 为长文本截断过长的prompt
+                truncated_prompt = self._truncate_prompt_if_needed(prompt, model_name)
+                if truncated_prompt != prompt:
+                    logger.info(f"Prompt已截断，原长度: {len(prompt)}，截断后: {len(truncated_prompt)}")
+                
                 if model_provider == "openai":
-                    response = client.chat.completions.create(
-                        model=model_name,
-                        messages=[
-                            {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
-                            {"role": "user", "content": prompt}
-                        ],
-                        temperature=0.3
-                    )
-                    answer = response.choices[0].message.content.strip()
+                    try:
+                        # 使用超时参数
+                        response = client.chat.completions.create(
+                            model=model_name,
+                            messages=[
+                                {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
+                                {"role": "user", "content": truncated_prompt}
+                            ],
+                            temperature=0.3,
+                            timeout=timeout_seconds  # 设置请求超时
+                        )
+                        answer = response.choices[0].message.content.strip()
+                    except Exception as api_error:
+                        logger.warning(f"OpenAI API调用出错: {str(api_error)}")
+                        # 如果不是GPT-4o，尝试回退到GPT-4o
+                        if model_name != "gpt-4o" and retries >= max_retries - 1:
+                            logger.warning(f"尝试使用GPT-4o作为后备模型")
+                            backup_client = OpenAI(api_key=self.get_api_key("openai"))
+                            backup_response = backup_client.chat.completions.create(
+                                model="gpt-4o",
+                                messages=[
+                                    {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
+                                    {"role": "user", "content": truncated_prompt}
+                                ],
+                                temperature=0.3,
+                                timeout=30
+                            )
+                            answer = backup_response.choices[0].message.content.strip()
+                            answer = f"[注: 原选择的模型({model_name})响应超时，系统自动切换到GPT-4o模型]\n\n{answer}"
+                        else:
+                            raise
                 
                 elif model_provider == "anthropic":
                     response = client.messages.create(
                         model=model_name,
                         system="你是一个严谨的《西游记》分析助手",
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=0.3
+                        messages=[{"role": "user", "content": truncated_prompt}],
+                        temperature=0.3,
+                        timeout=timeout_seconds
                     )
                     answer = response.content[0].text.strip()
                 
                 elif model_provider == "deepseek":
-                    response = client.chat.completions.create(
-                        model=model_name,
-                        messages=[
-                            {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
-                            {"role": "user", "content": prompt}
-                        ],
-                    )
-                    answer = response.choices[0].message.content.strip()
-                
+                    try:
+                        # DeepSeek API可能较慢，特别处理
+                        response = client.chat.completions.create(
+                            model=model_name,
+                            messages=[
+                                {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
+                                {"role": "user", "content": truncated_prompt}
+                            ],
+                            timeout=timeout_seconds
+                        )
+                        answer = response.choices[0].message.content.strip()
+                    except Exception as api_error:
+                        logger.warning(f"DeepSeek API调用出错: {str(api_error)}")
+                        # 最后一次尝试，使用OpenAI GPT-4o作为后备
+                        if retries >= max_retries - 1:
+                            logger.warning(f"DeepSeek模型失败，切换到GPT-4o")
+                            backup_client = OpenAI(api_key=self.get_api_key("openai"))
+                            backup_response = backup_client.chat.completions.create(
+                                model="gpt-4o",
+                                messages=[
+                                    {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
+                                    {"role": "user", "content": truncated_prompt}
+                                ],
+                                temperature=0.3,
+                                timeout=30
+                            )
+                            answer = backup_response.choices[0].message.content.strip()
+                            answer = f"[注: DeepSeek模型({model_name})响应超时，系统自动切换到GPT-4o模型]\n\n{answer}"
+                        else:
+                            raise
                 else:
                     raise ValueError(f"不支持的模型提供方：{model_provider}")
                 
@@ -328,7 +388,44 @@ class AnswerGenerator:
         
         logger.error(f"在 {max_retries} 次尝试后仍无法生成回答: {str(last_error)}")
         # 生成简单的备用回答
-        return f"很抱歉，我暂时无法回答您的问题。系统遇到了技术问题：{str(last_error)[:100]}..."
+        return f"很抱歉，我暂时无法回答您的问题。系统遇到了技术问题：{str(last_error)[:100]}...\n\n建议尝试使用GPT-4o模型重新提问，或稍后再试。"
+        
+    def _truncate_prompt_if_needed(self, prompt: str, model_name: str) -> str:
+        """截断过长的prompt以避免超出模型最大上下文长度或超时"""
+        # 根据不同模型设置不同的最大长度
+        max_length = 12000  # 默认值
+        
+        if model_name == "gpt-4.5-preview":
+            max_length = 18000
+        elif model_name == "gpt-4o":
+            max_length = 16000
+        elif "deepseek" in model_name:
+            max_length = 10000
+            
+        if len(prompt) <= max_length:
+            return prompt
+            
+        # 保留前后内容，截断中间
+        # 分割prompt以保留重要部分
+        parts = prompt.split("---")
+        if len(parts) >= 3:
+            # 保留指令(第一部分)和问题(最后部分)
+            instructions = parts[0]
+            context_raw = "---" + parts[1] + "---"
+            question = parts[2]
+            
+            # 计算需要保留的上下文长度
+            available_length = max_length - len(instructions) - len(question) - 100
+            if available_length <= 0:
+                # 极端情况，只保留指令和问题
+                return instructions + "---" + "上下文过长，已省略部分内容" + "---" + question
+                
+            # 截断上下文
+            truncated_context = context_raw[:available_length // 2] + "\n...\n[内容过长已省略中间部分]...\n" + context_raw[-available_length // 2:]
+            return instructions + truncated_context + question
+        
+        # 如果不符合预期格式，简单截断
+        return prompt[:max_length // 2] + "\n...\n[内容过长已省略中间部分]...\n" + prompt[-max_length // 2:]
     
     def generate_answer(
         self,

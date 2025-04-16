@@ -26,6 +26,9 @@
                     <option value="{{ model_id }}">{{ model.display_name }}</option>
                     {% endfor %}
                 </select>
+                <div class="model-tip small text-muted mt-1">
+                    <i class="bi bi-info-circle"></i> 推荐使用GPT-4o，其他模型可能响应较慢或偶尔超时
+                </div>
             </div>
 
             <div class="chat-messages" id="chat-messages">
