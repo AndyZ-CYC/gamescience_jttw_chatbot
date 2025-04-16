@@ -1,1 +1,1 @@
-web: gunicorn --config gunicorn.conf.py wsgi:application
+web: gunicorn wsgi:application --timeout 600 --workers 2 --worker-class sync --worker-connections 1000 --keep-alive 5
