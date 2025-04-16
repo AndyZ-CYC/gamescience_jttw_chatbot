@@ -314,8 +314,7 @@ class AnswerGenerator:
                                 {"role": "user", "content": truncated_prompt}
                             ],
                             temperature=0.3,
-                            timeout=timeout_seconds,  # 设置请求超时
-                            request_timeout=timeout_seconds # 同时设置请求超时
+                            timeout=timeout_seconds  # 设置请求超时
                         )
                         answer = response.choices[0].message.content.strip()
                     except Exception as api_error:
@@ -333,8 +332,7 @@ class AnswerGenerator:
                                     {"role": "user", "content": truncated_prompt}
                                 ],
                                 temperature=0.3,
-                                timeout=30,
-                                request_timeout=30
+                                timeout=30
                             )
                             answer = backup_response.choices[0].message.content.strip()
                             answer = f"[注: 原选择的模型({model_name})响应超时，系统自动切换到GPT-4o模型]\n\n{answer}"
@@ -360,8 +358,7 @@ class AnswerGenerator:
                                 {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
                                 {"role": "user", "content": truncated_prompt}
                             ],
-                            timeout=timeout_seconds,
-                            request_timeout=timeout_seconds
+                            timeout=timeout_seconds
                         )
                         answer = response.choices[0].message.content.strip()
                     except Exception as api_error:
@@ -377,8 +374,7 @@ class AnswerGenerator:
                                     {"role": "user", "content": truncated_prompt}
                                 ],
                                 temperature=0.3,
-                                timeout=30,
-                                request_timeout=30
+                                timeout=30
                             )
                             answer = backup_response.choices[0].message.content.strip()
                             answer = f"[注: DeepSeek模型({model_name})响应超时，系统自动切换到GPT-4o模型]\n\n{answer}"
