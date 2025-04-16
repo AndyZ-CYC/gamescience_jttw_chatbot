@@ -217,29 +217,26 @@ class AnswerGenerator:
         Returns:
             相应的客户端实例
         """
-        # 检查缓存中是否有现有客户端
-        cache_key = f"{model_provider}_{api_key[:8]}"  # 使用密钥前8个字符作为缓存键的一部分
-        
-        if cache_key in self._clients:
-            return self._clients[cache_key]
-        
+        # 防止客户端复用导致的流读取问题，不再使用缓存机制
+        # 每次请求都创建新客户端实例
         try:
             if model_provider == "openai":
                 from openai import OpenAI
                 client = OpenAI(api_key=api_key)
+                logger.debug("创建了新的OpenAI客户端")
+                return client
             elif model_provider == "anthropic":
                 from anthropic import Anthropic
                 client = Anthropic(api_key=api_key)
+                logger.debug("创建了新的Anthropic客户端")
+                return client
             elif model_provider == "deepseek":
                 from openai import OpenAI
                 client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+                logger.debug("创建了新的DeepSeek客户端")
+                return client
             else:
                 raise ValueError(f"不支持的模型提供方：{model_provider}")
-            
-            # 缓存客户端实例
-            self._clients[cache_key] = client
-            logger.debug(f"创建并缓存了新的 {model_provider} 客户端")
-            return client
             
         except ImportError as e:
             logger.error(f"导入{model_provider}客户端库失败: {str(e)}")
@@ -291,6 +288,14 @@ class AnswerGenerator:
                 if retries > 0:
                     logger.info(f"尝试第 {retries} 次重试...")
                     time.sleep(retry_delay * (2 ** (retries - 1)))  # 指数退避策略
+                    
+                    # 重试时重新创建客户端，避免连接复用导致的问题
+                    if model_provider == "openai":
+                        from openai import OpenAI
+                        client = OpenAI(api_key=self.get_api_key("openai"))
+                    elif model_provider == "deepseek":
+                        from openai import OpenAI
+                        client = OpenAI(api_key=self.get_api_key("deepseek"), base_url="https://api.deepseek.com")
                 
                 start_time = time.time()
                 
@@ -309,14 +314,17 @@ class AnswerGenerator:
                                 {"role": "user", "content": truncated_prompt}
                             ],
                             temperature=0.3,
-                            timeout=timeout_seconds  # 设置请求超时
+                            timeout=timeout_seconds,  # 设置请求超时
+                            request_timeout=timeout_seconds # 同时设置请求超时
                         )
                         answer = response.choices[0].message.content.strip()
                     except Exception as api_error:
                         logger.warning(f"OpenAI API调用出错: {str(api_error)}")
                         # 如果不是GPT-4o，尝试回退到GPT-4o
                         if model_name != "gpt-4o" and retries >= max_retries - 1:
+                            from openai import OpenAI
                             logger.warning(f"尝试使用GPT-4o作为后备模型")
+                            # 每次都创建新客户端，避免连接复用问题
                             backup_client = OpenAI(api_key=self.get_api_key("openai"))
                             backup_response = backup_client.chat.completions.create(
                                 model="gpt-4o",
@@ -325,7 +333,8 @@ class AnswerGenerator:
                                     {"role": "user", "content": truncated_prompt}
                                 ],
                                 temperature=0.3,
-                                timeout=30
+                                timeout=30,
+                                request_timeout=30
                             )
                             answer = backup_response.choices[0].message.content.strip()
                             answer = f"[注: 原选择的模型({model_name})响应超时，系统自动切换到GPT-4o模型]\n\n{answer}"
@@ -351,7 +360,8 @@ class AnswerGenerator:
                                 {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
                                 {"role": "user", "content": truncated_prompt}
                             ],
-                            timeout=timeout_seconds
+                            timeout=timeout_seconds,
+                            request_timeout=timeout_seconds
                         )
                         answer = response.choices[0].message.content.strip()
                     except Exception as api_error:
@@ -367,7 +377,8 @@ class AnswerGenerator:
                                     {"role": "user", "content": truncated_prompt}
                                 ],
                                 temperature=0.3,
-                                timeout=30
+                                timeout=30,
+                                request_timeout=30
                             )
                             answer = backup_response.choices[0].message.content.strip()
                             answer = f"[注: DeepSeek模型({model_name})响应超时，系统自动切换到GPT-4o模型]\n\n{answer}"
@@ -382,7 +393,14 @@ class AnswerGenerator:
             except Exception as e:
                 last_error = e
                 retries += 1
-                logger.warning(f"调用{model_provider}模型失败: {str(e)}")
+                error_str = str(e)
+                # 记录详细错误信息以便排查
+                if "body stream already read" in error_str:
+                    logger.error(f"HTTP响应流已读取错误: {error_str}")
+                    # 此类错误需要重建客户端
+                    self._clients = {}  # 清空客户端缓存
+                    
+                logger.warning(f"调用{model_provider}模型失败 (尝试 {retries}/{max_retries}): {error_str}")
                 if retries > max_retries:
                     break
         
@@ -393,14 +411,14 @@ class AnswerGenerator:
     def _truncate_prompt_if_needed(self, prompt: str, model_name: str) -> str:
         """截断过长的prompt以避免超出模型最大上下文长度或超时"""
         # 根据不同模型设置不同的最大长度
-        max_length = 12000  # 默认值
+        max_length = 64000  # 默认值
         
         if model_name == "gpt-4.5-preview":
-            max_length = 18000
+            max_length = 64000
         elif model_name == "gpt-4o":
-            max_length = 16000
+            max_length = 64000
         elif "deepseek" in model_name:
-            max_length = 10000
+            max_length = 64000
             
         if len(prompt) <= max_length:
             return prompt

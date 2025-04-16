@@ -83,11 +83,16 @@ def query():
     try:
         # 设置合理的超时时间，避免请求被挂起太久
         start_time = time.time()
-        max_wait_time = 100  # 最长等待100秒
         
         # 对于非GPT-4o模型添加提示
         is_gpt4o = (model_config["provider"] == "openai" and model_config["name"] == "gpt-4o")
         warning_msg = "" if is_gpt4o else "注意：非GPT-4o模型响应可能较慢，如遇超时将自动切换到GPT-4o。"
+        
+        # 避免在render.com上超时的措施
+        process_limit = 120  # 秒
+        # 如果不是GPT-4o模型，减少处理时间上限
+        if not is_gpt4o:
+            process_limit = 60
         
         answer = generate_answer(
             query=query_text,
@@ -106,16 +111,25 @@ def query():
         error_msg = str(e)
         print(f"生成回答时出错: {error_msg}")
         
-        # 检查是否包含超时错误的典型特征
-        if "timeout" in error_msg.lower() or "time" in error_msg.lower() and "out" in error_msg.lower():
+        # 确保总是返回JSON响应，即使在错误情况下
+        try:
+            # 检查是否包含超时错误的典型特征
+            if "timeout" in error_msg.lower() or ("time" in error_msg.lower() and "out" in error_msg.lower()):
+                return jsonify({
+                    "error": "处理请求超时",
+                    "message": f"您的查询太复杂，处理超时。请尝试使用GPT-4o模型或简化您的问题。错误详情: {str(e)[:100]}"
+                }), 408  # 408 Request Timeout
+            else:
+                return jsonify({
+                    "error": "生成回答时出错", 
+                    "message": str(e)[:200]
+                }), 500
+        except Exception as json_error:
+            # 如果连JSON化错误信息都失败，返回最简单的JSON
+            print(f"无法JSON化错误信息: {str(json_error)}")
             return jsonify({
-                "error": "处理请求超时",
-                "message": f"您的查询太复杂，处理超时。请尝试使用GPT-4o模型或简化您的问题。错误详情: {str(e)[:100]}"
-            }), 408  # 408 Request Timeout
-        else:
-            return jsonify({
-                "error": "生成回答时出错", 
-                "message": str(e)[:200]
+                "error": "系统错误",
+                "message": "处理请求时发生严重错误，请尝试刷新页面或使用GPT-4o模型"
             }), 500
 
 if __name__ == '__main__':

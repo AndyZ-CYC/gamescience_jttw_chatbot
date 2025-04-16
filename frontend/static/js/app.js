@@ -95,29 +95,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
             });
 
-            let data;
-            try {
-                // 尝试解析JSON响应
-                data = await response.json();
-            } catch (parseError) {
-                // 如果解析失败，获取原始文本
-                const textResponse = await response.text();
-                console.error('JSON解析失败:', parseError);
-                console.log('收到的非JSON响应:', textResponse.substring(0, 200) + '...');
-                throw new Error('服务器未返回有效JSON格式。这通常是由于请求超时导致。请尝试使用GPT-4o模型或简化您的问题。');
-            }
-            
+            // 检查响应状态并先判断是否有错误
             if (!response.ok) {
-                // 处理不同状态码的错误
-                if (response.status === 408) {
-                    throw new Error(data.message || '请求超时。请尝试使用GPT-4o模型或简化您的问题。');
-                } else {
-                    throw new Error(data.message || data.error || '请求失败');
+                // 尝试以JSON格式获取错误详情
+                try {
+                    const errorData = await response.json();
+                    if (response.status === 408) {
+                        throw new Error(errorData.message || '请求超时。请尝试使用GPT-4o模型或简化您的问题。');
+                    } else {
+                        throw new Error(errorData.message || errorData.error || `服务器错误 (${response.status})`);
+                    }
+                } catch (jsonError) {
+                    // 如果无法解析JSON，使用状态文本
+                    throw new Error(`服务器返回错误: ${response.status} ${response.statusText}`);
                 }
             }
-            
-            updateStatus('');
-            addMessage(data.answer, 'assistant');
+
+            // 只有在响应成功时才尝试解析JSON
+            try {
+                const data = await response.json();
+                updateStatus('');
+                addMessage(data.answer, 'assistant');
+            } catch (parseError) {
+                console.error('JSON解析失败:', parseError);
+                throw new Error('服务器返回了无效的数据格式。请尝试刷新页面或使用GPT-4o模型。');
+            }
             
         } catch (error) {
             console.error('请求出错:', error);
@@ -125,9 +127,9 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // 处理不同类型的错误，提供友好的错误消息
             let errorMessage = error.message;
-            if (error.message.includes('timeout') || error.message.includes('time') && error.message.includes('out')) {
+            if (errorMessage.includes('timeout') || (errorMessage.includes('time') && errorMessage.includes('out'))) {
                 errorMessage = '请求处理超时。请尝试使用GPT-4o模型或简化您的问题。';
-            } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+            } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
                 errorMessage = '网络连接错误。请检查您的网络连接并重试。';
             }
             
