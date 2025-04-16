@@ -315,7 +315,7 @@ class AnswerGenerator:
                                 {"role": "user", "content": truncated_prompt}
                             ],
                             temperature=0.3,
-                            timeout=timeout_seconds  # 设置请求超时
+                            # timeout=timeout_seconds  # 设置请求超时
                         )
                         answer = response.choices[0].message.content.strip()
                     except Exception as api_error:
