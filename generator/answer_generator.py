@@ -359,11 +359,18 @@ class AnswerGenerator:
                                 {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
                                 {"role": "user", "content": truncated_prompt}
                             ],
-                            timeout=timeout_seconds
+                            # timeout=timeout_seconds
                         )
                         answer = response.choices[0].message.content.strip()
                     except Exception as api_error:
-                        logger.warning(f"DeepSeek API调用出错: {str(api_error)}")
+                        # 记录详细错误信息
+                        error_str = str(api_error)
+                        logger.warning(f"DeepSeek API调用出错: {error_str}")
+                        logger.debug(f"完整错误信息: {traceback.format_exc()}")
+
+                        # 检查是否是超时相关错误
+                        if "timeout" in error_str.lower() or "timed out" in error_str.lower():
+                            logger.info("检测到超时错误，将在重试机制中处理")
                         # 最后一次尝试，使用OpenAI GPT-4o作为后备
                         if retries >= max_retries - 1:
                             logger.warning(f"DeepSeek模型失败，切换到GPT-4o")
