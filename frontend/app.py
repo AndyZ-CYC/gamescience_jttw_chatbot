@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from flask import Flask, render_template, request, jsonify
 
 # 添加项目根目录到系统路径
@@ -80,14 +81,42 @@ def query():
     model_config = MODELS[model_id]
     
     try:
+        # 设置合理的超时时间，避免请求被挂起太久
+        start_time = time.time()
+        max_wait_time = 100  # 最长等待100秒
+        
+        # 对于非GPT-4o模型添加提示
+        is_gpt4o = (model_config["provider"] == "openai" and model_config["name"] == "gpt-4o")
+        warning_msg = "" if is_gpt4o else "注意：非GPT-4o模型响应可能较慢，如遇超时将自动切换到GPT-4o。"
+        
         answer = generate_answer(
             query=query_text,
             model_provider=model_config["provider"],
             model_name=model_config["name"]
         )
+        
+        processing_time = time.time() - start_time
+        print(f"查询处理完成，耗时: {processing_time:.2f}秒")
+        
+        if warning_msg and processing_time > 10:  # 如果处理时间较长，加入警告提示
+            answer = f"{warning_msg}\n\n{answer}"
+            
         return jsonify({"answer": answer})
     except Exception as e:
-        return jsonify({"error": f"生成回答时出错: {str(e)}"}), 500
+        error_msg = str(e)
+        print(f"生成回答时出错: {error_msg}")
+        
+        # 检查是否包含超时错误的典型特征
+        if "timeout" in error_msg.lower() or "time" in error_msg.lower() and "out" in error_msg.lower():
+            return jsonify({
+                "error": "处理请求超时",
+                "message": f"您的查询太复杂，处理超时。请尝试使用GPT-4o模型或简化您的问题。错误详情: {str(e)[:100]}"
+            }), 408  # 408 Request Timeout
+        else:
+            return jsonify({
+                "error": "生成回答时出错", 
+                "message": str(e)[:200]
+            }), 500
 
 if __name__ == '__main__':
     # 在启动前初始化

@@ -95,10 +95,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
             });
 
-            const data = await response.json();
+            let data;
+            try {
+                // 尝试解析JSON响应
+                data = await response.json();
+            } catch (parseError) {
+                // 如果解析失败，获取原始文本
+                const textResponse = await response.text();
+                console.error('JSON解析失败:', parseError);
+                console.log('收到的非JSON响应:', textResponse.substring(0, 200) + '...');
+                throw new Error('服务器未返回有效JSON格式。这通常是由于请求超时导致。请尝试使用GPT-4o模型或简化您的问题。');
+            }
             
             if (!response.ok) {
-                throw new Error(data.error || '请求失败');
+                // 处理不同状态码的错误
+                if (response.status === 408) {
+                    throw new Error(data.message || '请求超时。请尝试使用GPT-4o模型或简化您的问题。');
+                } else {
+                    throw new Error(data.message || data.error || '请求失败');
+                }
             }
             
             updateStatus('');
@@ -107,7 +122,24 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             console.error('请求出错:', error);
             updateStatus('error');
-            addMessage(`请求出错: ${error.message}`, 'system');
+            
+            // 处理不同类型的错误，提供友好的错误消息
+            let errorMessage = error.message;
+            if (error.message.includes('timeout') || error.message.includes('time') && error.message.includes('out')) {
+                errorMessage = '请求处理超时。请尝试使用GPT-4o模型或简化您的问题。';
+            } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                errorMessage = '网络连接错误。请检查您的网络连接并重试。';
+            }
+            
+            addMessage(`请求出错: ${errorMessage}`, 'system');
+            
+            // 如果是非GPT-4o模型，自动建议切换
+            if (model !== 'gpt-4o') {
+                setTimeout(() => {
+                    addMessage('系统建议：尝试切换到GPT-4o模型可能会解决此问题。', 'system');
+                    modelSelect.value = 'gpt-4o';
+                }, 1000);
+            }
         }
     }
 
