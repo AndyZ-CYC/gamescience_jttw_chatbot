@@ -139,40 +139,104 @@
 1. 安装Python 3.8+
 2. 安装依赖包：
    ```
-   pip install openai pinecone-client flask markdown python-dotenv
+   pip install -r requirements.txt
    ```
-3. 准备API密钥
+3. 设置环境变量（选择以下任一方式）：
+
+   方式1 - 使用环境变量：
+   ```bash
+   # Windows
+   set OPENAI_API_KEY=你的OpenAI API密钥
+   set PINECONE_API_KEY=你的Pinecone API密钥
+   set DEEPSEEK_API_KEY=你的DeepSeek API密钥
+
+   # Linux/Mac
+   export OPENAI_API_KEY=你的OpenAI API密钥
+   export PINECONE_API_KEY=你的Pinecone API密钥
+   export DEEPSEEK_API_KEY=你的DeepSeek API密钥
+   ```
+
+   方式2 - 使用.env文件：
+   在项目根目录创建 `.env` 文件：
+   ```
+   OPENAI_API_KEY=你的OpenAI API密钥
+   PINECONE_API_KEY=你的Pinecone API密钥
+   DEEPSEEK_API_KEY=你的DeepSeek API密钥
+   PINECONE_INDEX_NAME=xiyouji-embedding
+   ```
 
 ##### 启动系统
 
 1. 启动前端服务：
    ```
-   python frontend/run.py
+   python wsgi.py
    ```
 2. 访问Web界面：
    ```
-   http://127.0.0.1:5000
+   http://127.0.0.1:3000
    ```
 
-### 方法2：使用在线Web版本
+### 方法2：使用Railway部署
 
-系统已部署在线上，可以通过以下方式访问：
+Railway.app 提供了简单的云端部署方案：
 
-#### 访问方式
-- **在线地址**：[西游记问答系统](https://xiyouji-qa.onrender.com)
-- **支持设备**：电脑、平板和手机等各种设备（自适应界面）
+1. 在 Railway.app 创建新项目
+2. 连接 GitHub 仓库
+3. 设置环境变量：
+   - 在 Railway 仪表板中添加必要的环境变量（同上述环境变量列表）
+4. Railway 会自动检测并部署项目
+5. 部署完成后，可以通过 Railway 提供的域名访问系统
 
-#### 使用说明
-1. 打开网页后系统会自动初始化（初次加载可能需要等待约20-30秒）
-2. 在输入框中输入有关《西游记》的问题
-3. 从下拉菜单中选择使用的模型（默认为GPT-4o）
-4. 点击发送按钮或按回车键提交问题
-5. 系统会显示正在思考状态，稍后展示回答
+### 方法3：使用Render.com部署
 
-#### 特点
-- 无需安装，直接通过浏览器访问
-- 同时支持多个用户独立使用
-- 所有API密钥和配置已预先设置，用户无需提供自己的密钥
+Render.com 也是一个很好的部署选择：
+
+1. 在 Render.com 创建新的 Web Service
+2. 连接 GitHub 仓库
+3. 设置环境变量
+4. 配置启动命令：`gunicorn wsgi:application`
+5. 选择合适的实例类型（建议至少使用 Standard 方案）
+
+## 部署注意事项
+
+### 环境变量配置
+
+如果环境变量未设置，系统会使用以下默认值：
+- OPENAI_API_KEY：无默认值，必须设置
+- PINECONE_API_KEY：无默认值，必须设置
+- DEEPSEEK_API_KEY：无默认值，可选
+- PINECONE_INDEX_NAME：默认为 "xiyouji-embedding"
+- PORT：Railway默认使用3000端口，Render默认使用5000端口
+
+### 部署平台特性
+
+- **Railway.app**：
+  - 使用 Nixpacks 构建系统
+  - 默认端口为3000
+  - 支持自动化部署
+  - 适合中小规模应用
+
+- **Render.com**：
+  - 使用 Gunicorn 部署
+  - 默认端口为5000
+  - 支持自动化部署
+  - 提供更多的配置选项
+
+### 性能优化建议
+
+1. 选择合适的部署方案：
+   - 个人使用：本地部署
+   - 小规模应用：Railway.app
+   - 需要更多控制：Render.com
+
+2. 根据使用情况选择合适的实例规格：
+   - Railway：默认配置通常足够
+   - Render：建议使用 Standard 方案以上
+
+3. 模型选择建议：
+   - GPT-4o：默认推荐，响应最快
+   - DeepSeek模型：更适合中文语境，通常有比GPT-4o略强的表现，但略逊于GPT-4.5-preview
+   - GPT-4.5-preview：适合复杂问题，但响应较慢且费用极高
 
 ## 使用工具汇总
 
