@@ -56,6 +56,9 @@ def setup():
 # 初始化应用
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False  # 确保JSON响应中的非ASCII字符(如中文)不被转义
+app.config['MAX_CONTENT_LENGTH'] = None  # 禁用最大内容长度限制
+app.config['PROPAGATE_EXCEPTIONS'] = True  # 确保异常可以传播
+app.config['PRESERVE_CONTEXT_ON_EXCEPTION'] = False  # 减少内存使用
 
 # 在应用上下文中添加一个初始化函数
 @app.route('/init', methods=['GET'])

@@ -263,19 +263,40 @@ class AnswerGenerator:
             answer = response.content[0].text.strip()
         
         elif model_provider == "deepseek":
-            import threading
-            import concurrent.futures
-            from openai import OpenAI
+            # 使用简单直接的方法，避免创建过多线程或复杂结构
+            import signal
+            from contextlib import contextmanager
             
-            # 定义一个在单独线程中调用DeepSeek API的函数
-            def call_deepseek_api():
+            # 设置超时处理函数
+            @contextmanager
+            def timeout_handler(seconds):
+                def signal_handler(signum, frame):
+                    raise TimeoutError(f"DeepSeek API调用超时({seconds}秒)")
+                
+                # 设置SIGALRM信号处理器
+                original_handler = signal.signal(signal.SIGALRM, signal_handler)
+                # 设置闹钟
+                signal.alarm(seconds)
+                
                 try:
-                    # 记录开始时间
-                    start_time = time.time()
-                    print(f"开始调用DeepSeek {model_name} 模型...")
-                    
-                    # 创建客户端并调用API
-                    client_local = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+                    yield  # 执行被包装的代码块
+                finally:
+                    # 恢复原始信号处理器并取消闹钟
+                    signal.alarm(0)
+                    signal.signal(signal.SIGALRM, original_handler)
+            
+            # 直接调用API，使用系统级超时控制
+            client_local = None
+            try:
+                print(f"开始调用DeepSeek {model_name} 模型...")
+                start_time = time.time()
+                
+                # 创建客户端
+                from openai import OpenAI
+                client_local = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+                
+                # 使用超时控制
+                with timeout_handler(180):  # 3分钟超时，避免过长等待
                     response = client_local.chat.completions.create(
                         model=model_name,
                         messages=[
@@ -283,29 +304,20 @@ class AnswerGenerator:
                             {"role": "user", "content": prompt}
                         ]
                     )
-                    
-                    # 返回结果
-                    elapsed = time.time() - start_time
-                    print(f"DeepSeek模型响应成功，耗时 {elapsed:.2f} 秒")
-                    return response.choices[0].message.content.strip()
-                except Exception as e:
-                    print(f"DeepSeek模型调用失败: {str(e)}")
-                    raise  # 重新抛出异常，让executor捕获
-            
-            # 使用线程池执行器，设置超时
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(call_deepseek_api)
+                    answer = response.choices[0].message.content.strip()
                 
-                try:
-                    # 使用内置的超时机制，而不是手动sleep
-                    # 这不会阻塞主线程，而是使用异步计算
-                    answer = future.result(timeout=300)  # 300秒超时
-                except concurrent.futures.TimeoutError:
-                    print(f"DeepSeek模型响应超时(300秒)")
-                    answer = f"很抱歉，使用DeepSeek模型({model_name})时请求超时(300秒)。\n\n建议您切换到GPT-4o模型以获得更快的响应。"
-                except Exception as e:
-                    print(f"DeepSeek模型调用发生错误: {str(e)}")
-                    answer = f"很抱歉，使用DeepSeek模型({model_name})时发生错误: {str(e)}。\n\n建议您切换到GPT-4o模型以获得更快的响应。"
+                # 记录成功信息
+                elapsed = time.time() - start_time
+                print(f"DeepSeek模型响应成功，耗时 {elapsed:.2f} 秒")
+                
+            except TimeoutError as e:
+                # 超时处理
+                print(f"DeepSeek模型调用超时: {str(e)}")
+                answer = f"很抱歉，使用DeepSeek模型({model_name})时请求超时(3分钟)。\n\n建议您切换到GPT-4o模型以获得更快的响应。"
+            except Exception as e:
+                # 其他错误处理
+                print(f"DeepSeek模型调用失败: {str(e)}")
+                answer = f"很抱歉，使用DeepSeek模型({model_name})时发生错误: {str(e)}。\n\n建议您切换到GPT-4o模型以获得更快的响应。"
         
         else:
             raise ValueError(f"不支持的模型提供方：{model_provider}")
