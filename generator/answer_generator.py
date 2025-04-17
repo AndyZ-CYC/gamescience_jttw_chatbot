@@ -264,12 +264,8 @@ class AnswerGenerator:
         
         elif model_provider == "deepseek":
             import threading
-            import queue
+            import concurrent.futures
             from openai import OpenAI
-            
-            # 创建一个队列用于存储结果
-            result_queue = queue.Queue()
-            error_queue = queue.Queue()
             
             # 定义一个在单独线程中调用DeepSeek API的函数
             def call_deepseek_api():
@@ -288,54 +284,28 @@ class AnswerGenerator:
                         ]
                     )
                     
-                    # 将结果放入队列
+                    # 返回结果
                     elapsed = time.time() - start_time
                     print(f"DeepSeek模型响应成功，耗时 {elapsed:.2f} 秒")
-                    result_queue.put(response.choices[0].message.content.strip())
+                    return response.choices[0].message.content.strip()
                 except Exception as e:
-                    # 如果发生错误，将错误放入队列
-                    error_queue.put(str(e))
                     print(f"DeepSeek模型调用失败: {str(e)}")
+                    raise  # 重新抛出异常，让executor捕获
             
-            # 创建并启动线程
-            api_thread = threading.Thread(target=call_deepseek_api)
-            api_thread.daemon = True  # 设置为守护线程，这样主线程退出时它会自动终止
-            api_thread.start()
-            
-            # 等待结果，最多等待300秒
-            try:
-                # 每5秒检查一次并输出状态信息，以保持进程活动
-                max_wait_time = 300  # 最长等待时间(秒)
-                wait_interval = 5    # 检查间隔(秒)
-                wait_count = 0
+            # 使用线程池执行器，设置超时
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(call_deepseek_api)
                 
-                while wait_count < max_wait_time:
-                    # 检查是否有结果
-                    try:
-                        answer = result_queue.get(block=False)
-                        break  # 有结果，退出等待循环
-                    except queue.Empty:
-                        pass  # 队列为空，继续等待
-                        
-                    # 检查是否有错误
-                    try:
-                        error_msg = error_queue.get(block=False)
-                        raise RuntimeError(f"DeepSeek模型调用失败: {error_msg}")
-                    except queue.Empty:
-                        pass  # 没有错误，继续等待
-                        
-                    # 输出状态信息，保持进程活动
-                    print(f"等待DeepSeek模型响应中，已等待 {wait_count} 秒...")
-                    time.sleep(wait_interval)
-                    wait_count += wait_interval
-                    
-                # 如果超过等待时间仍无响应
-                if wait_count >= max_wait_time:
-                    raise TimeoutError("DeepSeek模型响应超时(300秒)")
-            
-            except (TimeoutError, RuntimeError) as e:
-                # 处理超时或API错误
-                answer = f"很抱歉，使用DeepSeek模型({model_name})时遇到了问题: {str(e)}。\n\n建议您切换到GPT-4o模型以获得更快的响应。"
+                try:
+                    # 使用内置的超时机制，而不是手动sleep
+                    # 这不会阻塞主线程，而是使用异步计算
+                    answer = future.result(timeout=300)  # 300秒超时
+                except concurrent.futures.TimeoutError:
+                    print(f"DeepSeek模型响应超时(300秒)")
+                    answer = f"很抱歉，使用DeepSeek模型({model_name})时请求超时(300秒)。\n\n建议您切换到GPT-4o模型以获得更快的响应。"
+                except Exception as e:
+                    print(f"DeepSeek模型调用发生错误: {str(e)}")
+                    answer = f"很抱歉，使用DeepSeek模型({model_name})时发生错误: {str(e)}。\n\n建议您切换到GPT-4o模型以获得更快的响应。"
         
         else:
             raise ValueError(f"不支持的模型提供方：{model_provider}")
