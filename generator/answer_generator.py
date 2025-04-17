@@ -39,10 +39,15 @@
 import json
 import os
 import time
+import threading
 from typing import List, Dict, Tuple, Optional
+from contextlib import contextmanager
 
 # 导入检索器模块
 from retriever.combined_retriever import combined_retrieve, initialize as initialize_combined
+
+class TimeoutError(Exception):
+    pass
 
 class AnswerGenerator:
     """回答生成器类，用于生成基于检索结果的回答"""
@@ -51,6 +56,7 @@ class AnswerGenerator:
         """初始化回答生成器"""
         self._initialized = False
         self._api_keys = {}  # 存储不同模型提供商的API密钥
+        self._timeout_occurred = False
     
     def initialize(
         self,
@@ -202,6 +208,22 @@ class AnswerGenerator:
         else:
             raise ValueError(f"不支持的模型提供方：{model_provider}")
     
+    @contextmanager
+    def timeout(self, seconds):
+        """使用threading.Timer实现的超时控制"""
+        def timeout_handler():
+            self._timeout_occurred = True
+
+        timer = threading.Timer(seconds, timeout_handler)
+        timer.start()
+        try:
+            yield
+        finally:
+            timer.cancel()
+            if self._timeout_occurred:
+                raise TimeoutError(f"操作超时（{seconds}秒）")
+            self._timeout_occurred = False
+
     def generate_answer(
         self,
         query: str,
@@ -222,13 +244,13 @@ class AnswerGenerator:
             
         Returns:
             生成的回答
-        
+            
         Raises:
             RuntimeError: 如果尚未初始化或者缺少所需的API密钥
         """
         if not self._initialized:
             raise RuntimeError("请先调用initialize()进行初始化")
-        
+            
         # 如果未提供API密钥，则使用初始化时保存的相应提供商的API密钥
         if api_key is None:
             api_key = self.get_api_key(model_provider)
@@ -238,91 +260,60 @@ class AnswerGenerator:
         # 构建prompt
         prompt, retrieved = self.build_prompt(query, max_context_chars)
         
-        # 获取客户端
-        client = self.get_client(model_provider, api_key)
-        
-        # 根据不同的模型提供商生成回答
-        if model_provider == "openai":
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3
-            )
-            answer = response.choices[0].message.content.strip()
-        
-        elif model_provider == "anthropic":
-            response = client.messages.create(
-                model=model_name,
-                system="你是一个严谨的《西游记》分析助手",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3
-            )
-            answer = response.content[0].text.strip()
-        
-        elif model_provider == "deepseek":
-            # 使用简单直接的方法，避免创建过多线程或复杂结构
-            import signal
-            from contextlib import contextmanager
+        try:
+            # 获取客户端
+            client = self.get_client(model_provider, api_key)
             
-            # 设置超时处理函数
-            @contextmanager
-            def timeout_handler(seconds):
-                def signal_handler(signum, frame):
-                    raise TimeoutError(f"DeepSeek API调用超时({seconds}秒)")
-                
-                # 设置SIGALRM信号处理器
-                original_handler = signal.signal(signal.SIGALRM, signal_handler)
-                # 设置闹钟
-                signal.alarm(seconds)
-                
-                try:
-                    yield  # 执行被包装的代码块
-                finally:
-                    # 恢复原始信号处理器并取消闹钟
-                    signal.alarm(0)
-                    signal.signal(signal.SIGALRM, original_handler)
+            print(f"\n开始调用{model_provider} {model_name} 模型...")
             
-            # 直接调用API，使用系统级超时控制
-            client_local = None
-            try:
-                print(f"开始调用DeepSeek {model_name} 模型...")
-                start_time = time.time()
-                
-                # 创建客户端
-                from openai import OpenAI
-                client_local = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-                
-                # 使用超时控制
-                with timeout_handler(180):  # 3分钟超时，避免过长等待
-                    response = client_local.chat.completions.create(
+            with self.timeout(300):  # 5分钟超时
+                if model_provider == "openai":
+                    response = client.chat.completions.create(
                         model=model_name,
                         messages=[
                             {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
                             {"role": "user", "content": prompt}
-                        ]
+                        ],
+                        temperature=0.3,
+                        timeout=180
                     )
                     answer = response.choices[0].message.content.strip()
                 
-                # 记录成功信息
-                elapsed = time.time() - start_time
-                print(f"DeepSeek模型响应成功，耗时 {elapsed:.2f} 秒")
+                elif model_provider == "anthropic":
+                    response = client.messages.create(
+                        model=model_name,
+                        system="你是一个严谨的《西游记》分析助手",
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.3
+                    )
+                    answer = response.content[0].text.strip()
                 
-            except TimeoutError as e:
-                # 超时处理
-                print(f"DeepSeek模型调用超时: {str(e)}")
-                answer = f"很抱歉，使用DeepSeek模型({model_name})时请求超时(3分钟)。\n\n建议您切换到GPT-4o模型以获得更快的响应。"
-            except Exception as e:
-                # 其他错误处理
-                print(f"DeepSeek模型调用失败: {str(e)}")
-                answer = f"很抱歉，使用DeepSeek模型({model_name})时发生错误: {str(e)}。\n\n建议您切换到GPT-4o模型以获得更快的响应。"
-        
-        else:
-            raise ValueError(f"不支持的模型提供方：{model_provider}")
-        
-        return answer
+                elif model_provider == "deepseek":
+                    response = client.chat.completions.create(
+                        model=model_name,
+                        messages=[
+                            {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=0.3,
+                        timeout=180
+                    )
+                    answer = response.choices[0].message.content.strip()
+                
+                else:
+                    raise ValueError(f"不支持的模型提供方：{model_provider}")
+                    
+                return answer
+                    
+        except TimeoutError as e:
+            error_msg = f"使用{model_provider}模型({model_name})时超时"
+            print(f"\n{error_msg}")
+            return f"很抱歉，{error_msg}。\n\n建议您切换到GPT-4o模型以获得更快的响应。"
+            
+        except Exception as e:
+            error_msg = f"使用{model_provider}模型({model_name})时发生错误: {str(e)}"
+            print(f"\n{error_msg}")
+            return f"很抱歉，{error_msg}。\n\n建议您切换到GPT-4o模型以获得更快的响应。"
 
 # 创建全局实例以便直接导入使用
 generator = AnswerGenerator()
