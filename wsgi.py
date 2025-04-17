@@ -1,5 +1,5 @@
 """
-WSGI入口点 - 用于Gunicorn启动
+WSGI入口点 - 用于Railway部署
 """
 import os
 import sys
@@ -10,10 +10,11 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("xiyouji-app")
 
 # 添加项目根目录到系统路径
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(BASE_DIR)
 
 # 检查数据文件是否存在
-data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "all_paragraphs.json")
+data_path = os.path.join(BASE_DIR, "data", "all_paragraphs.json")
 if not os.path.exists(data_path):
     logger.error(f"数据文件不存在: {data_path}")
     logger.error("确保数据文件已上传到正确的位置")
@@ -29,15 +30,13 @@ try:
     setup()
     logger.info("应用初始化完成!")
     
-    # 导出应用对象供Gunicorn使用
+    # 导出应用对象
     application = app
 except Exception as error:
     logger.error(f"应用初始化失败: {str(error)}", exc_info=True)
-    # 创建一个最小的应用以显示错误信息
     from flask import Flask, jsonify
     fallback_app = Flask(__name__)
     
-    # 保存错误信息，以便在路由函数中使用
     error_message = str(error)
     
     @fallback_app.route('/')
@@ -50,7 +49,7 @@ except Exception as error:
     
     application = fallback_app
 
+# Railway特定配置
 if __name__ == "__main__":
-    # 直接运行此文件时
-    port = int(os.environ.get('PORT', 5000))
-    application.run(host='0.0.0.0', port=port) 
+    port = int(os.environ.get('PORT', 3000))  # Railway默认使用3000端口
+    application.run(host='0.0.0.0', port=port, debug=False) 
