@@ -1,7 +1,7 @@
 # retriever/combined_retriever.py
 from typing import List, Dict, Optional
 from .semantic_retriever import smart_semantic_retrieve as semantic_retrieve, initialize as semantic_initialize
-from .keyword_retriever import keyword_retrieve_smart_fuzzy, initialize as keyword_initialize, load_paragraphs
+from .keyword_retriever import keyword_retrieve_smart_fuzzy, initialize as keyword_initialize
 
 # 全局配置
 class Config:
@@ -48,18 +48,18 @@ def initialize(
         chat_model=chat_model
     )
     
-    # 初始化关键词检索器 - 正确传递参数
+    # 初始化关键词检索器
     keyword_initialize(
         openai_api_key=openai_api_key,
-        chat_model=chat_model,
-        paragraphs_file=json_path  # 使用正确的参数名
+        json_path=json_path,
+        chat_model=chat_model
     )
     
     _initialized = True
 
 def combined_retrieve(
     query: str,
-    top_k_base: int = 50,
+    top_k_base: int = 20,
     top_k_high: int = 100,
     weight_semantic: float = 1.0,
     weight_keyword: float = 0.8
@@ -82,7 +82,7 @@ def combined_retrieve(
         
     # 动态确定top k
     def determine_top_k(query: str) -> int:
-        pattern_keywords = ["多少次", "几次", "列举", "所有", "哪些", "每一回", "全部", "列表", "列出", "清单", "一览", "一共", "其中", "八十一难"]
+        pattern_keywords = ["多少次", "几次", "列举", "所有", "哪些", "每一回", "全部"]
         for kw in pattern_keywords:
             if kw in query:
                 return top_k_high
@@ -102,7 +102,6 @@ def combined_retrieve(
     keyword_results = keyword_retrieve_smart_fuzzy(query, top_k=top_k * 2)
     for item in keyword_results:
         item["_semantic_score"] = 0.0
-        item["_keyword_score"] = item.get("score", 0.0)
         item["_source"] = "keyword"
     
     # 合并（按 ID 去重 + 累加得分）

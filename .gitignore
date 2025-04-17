@@ -20,19 +20,28 @@ var/
 .installed.cfg
 *.egg
 
-# Virtual Environment
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Flask
+instance/
+.webassets-cache
+
+# 环境文件
+.env
+.venv
 venv/
 ENV/
 
-# IDE
+# IDE文件
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# OS specific
+# OS文件
 .DS_Store
 Thumbs.db
 
-# Application specific
+# 日志文件
 *.log 

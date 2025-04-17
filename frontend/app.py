@@ -3,6 +3,10 @@ import sys
 import time
 from flask import Flask, render_template, request, jsonify
 
+# 设置控制台输出编码
+if hasattr(sys.stdout, 'reconfigure') and sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
+
 # 添加项目根目录到系统路径
 if getattr(sys, 'frozen', False):
     # 在PyInstaller打包的环境中运行
@@ -13,17 +17,14 @@ else:
 
 sys.path.append(BASE_DIR)
 
-# 设置控制台输出编码
-if hasattr(sys.stdout, 'reconfigure') and sys.stdout.encoding != 'utf-8':
-    sys.stdout.reconfigure(encoding='utf-8')
-
 # 导入生成器模块
 from generator import initialize, generate_answer, set_api_key
 
-# API密钥和配置
+# API密钥和配置 - 从环境变量获取，如果没有则使用默认值
+# 注意：在生产环境中，请务必设置环境变量而不是使用这些默认值
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', "")
-PINECONE_API_KEY = os.environ.get('PINECONE_API_KEY', "pcsk_5u46KS_Hx3E1L6rTJqeYJ7GmEmDEtpzT6juNNHBmVQTNEaoKr7uaH5tJHzjjdKcU3GaUZw")
-DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', "sk-e7852049ff9940a2b39113eeb97f1103")
+PINECONE_API_KEY = os.environ.get('PINECONE_API_KEY', "")
+DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', "")
 PINECONE_INDEX_NAME = os.environ.get('PINECONE_INDEX_NAME', "xiyouji-embedding")
 
 # 使用绝对路径定位JSON文件
@@ -80,14 +81,9 @@ def query():
     
     model_config = MODELS[model_id]
     
-    # 对于非GPT-4o模型添加提示
-    is_gpt4o = (model_config["provider"] == "openai" and model_config["name"] == "gpt-4o")
-    warning_msg = "" if is_gpt4o else "注意：对于复杂问题，处理可能需要较长时间。若遇到问题，可尝试简化您的问题或稍后重试。"
-    
     try:
         start_time = time.time()
         
-        # 直接调用生成答案的函数
         answer = generate_answer(
             query=query_text,
             model_provider=model_config["provider"],
@@ -97,35 +93,11 @@ def query():
         processing_time = time.time() - start_time
         print(f"查询处理完成，耗时: {processing_time:.2f}秒")
         
-        if warning_msg and processing_time > 15:
-            answer = f"{warning_msg}\n\n{answer}"
-            
-        # 正常返回结果
         return jsonify({"answer": answer})
-        
     except Exception as e:
         error_msg = str(e)
         print(f"生成回答时出错: {error_msg}")
-        
-        try:
-            # 检查是否包含超时错误的典型特征
-            if "timeout" in error_msg.lower() or ("time" in error_msg.lower() and "out" in error_msg.lower()):
-                return jsonify({
-                    "error": "处理请求超时",
-                    "message": "您的查询处理时间过长，服务器响应超时。请尝试简化您的问题或稍后重试。"
-                }), 408  # 408 Request Timeout
-            else:
-                return jsonify({
-                    "error": "生成回答时出错", 
-                    "message": f"处理出错: {error_msg[:200]}"
-                }), 500
-        except Exception as json_error:
-            # 如果连JSON化错误信息都失败，返回最简单的JSON
-            print(f"无法JSON化错误信息: {str(json_error)}")
-            return jsonify({
-                "error": "系统错误",
-                "message": "处理请求时发生严重错误，请尝试刷新页面或稍后重试"
-            }), 500
+        return jsonify({"error": f"生成回答时出错: {error_msg[:200]}"}), 500
 
 if __name__ == '__main__':
     # 在启动前初始化
