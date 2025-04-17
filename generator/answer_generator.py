@@ -263,14 +263,79 @@ class AnswerGenerator:
             answer = response.content[0].text.strip()
         
         elif model_provider == "deepseek":
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
-                    {"role": "user", "content": prompt}
-                ],
-            )
-            answer = response.choices[0].message.content.strip()
+            import threading
+            import queue
+            from openai import OpenAI
+            
+            # 创建一个队列用于存储结果
+            result_queue = queue.Queue()
+            error_queue = queue.Queue()
+            
+            # 定义一个在单独线程中调用DeepSeek API的函数
+            def call_deepseek_api():
+                try:
+                    # 记录开始时间
+                    start_time = time.time()
+                    print(f"开始调用DeepSeek {model_name} 模型...")
+                    
+                    # 创建客户端并调用API
+                    client_local = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+                    response = client_local.chat.completions.create(
+                        model=model_name,
+                        messages=[
+                            {"role": "system", "content": "你是一个严谨的《西游记》分析助手"},
+                            {"role": "user", "content": prompt}
+                        ]
+                    )
+                    
+                    # 将结果放入队列
+                    elapsed = time.time() - start_time
+                    print(f"DeepSeek模型响应成功，耗时 {elapsed:.2f} 秒")
+                    result_queue.put(response.choices[0].message.content.strip())
+                except Exception as e:
+                    # 如果发生错误，将错误放入队列
+                    error_queue.put(str(e))
+                    print(f"DeepSeek模型调用失败: {str(e)}")
+            
+            # 创建并启动线程
+            api_thread = threading.Thread(target=call_deepseek_api)
+            api_thread.daemon = True  # 设置为守护线程，这样主线程退出时它会自动终止
+            api_thread.start()
+            
+            # 等待结果，最多等待300秒
+            try:
+                # 每5秒检查一次并输出状态信息，以保持进程活动
+                max_wait_time = 300  # 最长等待时间(秒)
+                wait_interval = 5    # 检查间隔(秒)
+                wait_count = 0
+                
+                while wait_count < max_wait_time:
+                    # 检查是否有结果
+                    try:
+                        answer = result_queue.get(block=False)
+                        break  # 有结果，退出等待循环
+                    except queue.Empty:
+                        pass  # 队列为空，继续等待
+                        
+                    # 检查是否有错误
+                    try:
+                        error_msg = error_queue.get(block=False)
+                        raise RuntimeError(f"DeepSeek模型调用失败: {error_msg}")
+                    except queue.Empty:
+                        pass  # 没有错误，继续等待
+                        
+                    # 输出状态信息，保持进程活动
+                    print(f"等待DeepSeek模型响应中，已等待 {wait_count} 秒...")
+                    time.sleep(wait_interval)
+                    wait_count += wait_interval
+                    
+                # 如果超过等待时间仍无响应
+                if wait_count >= max_wait_time:
+                    raise TimeoutError("DeepSeek模型响应超时(300秒)")
+            
+            except (TimeoutError, RuntimeError) as e:
+                # 处理超时或API错误
+                answer = f"很抱歉，使用DeepSeek模型({model_name})时遇到了问题: {str(e)}。\n\n建议您切换到GPT-4o模型以获得更快的响应。"
         
         else:
             raise ValueError(f"不支持的模型提供方：{model_provider}")
